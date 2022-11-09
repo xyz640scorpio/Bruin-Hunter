@@ -16,33 +16,46 @@ const OBJECT_TYPE = {
     GHOST: 3,
 }
 
-items.exports = {OBJECT_TYPE}
-
 const WALL_WIDTH = 1;
 const PACMAN_SPEED = 2;
 const PACMAN_RADIUS = 0.25;
 const GHOST_SPEED = 1.5;
 const GHOST_RADIUS = 0.25 * 1.25;
 const DOT_RADIUS = 0.05;
+items.exports = {OBJECT_TYPE, PACMAN_SPEED, PACMAN_RADIUS, WALL_WIDTH}
+
+const VecHelper = items.VecHelper =
+    class VecHelper {
+        static round_vec3(v) {
+            v[0] = Math.round(v[0]);
+            v[1] = Math.round(v[1]);
+            v[2] = Math.round(v[2]);
+        }
+    }
+const round_vec3 = items.round_vec3 = VecHelper.round_vec3;
 const Wall = items.Wall =
     class Wall {
         constructor(parameters) {
             this.type = OBJECT_TYPE.WALL;
             this.width = WALL_WIDTH;
             this.color = hex_color("#0000FF");
-            this.ambient = 1;
+            this.ambient = 0.9;
             this.shape = new defs.Cube();
             Object.assign(this, parameters);
             this.material = new Material(new defs.Phong_Shader(),
                 {ambient: this.ambient, color: this.color });
         }
 
-        draw(context, program_state, position) {
+        draw(context, program_state, position, direction=undefined) {
             let transform = Mat4.identity();
             transform = transform
                 .times(Mat4.translation(position[0], position[1], position[2]))
                 .times(Mat4.scale(this.width/2, this.width/2, this.width/2));
+            if (direction) {
+                transform = transform.times(direction);
+            }
             this.shape.draw(context, program_state, transform, this.material);
+            return transform;
         }
     }
 
@@ -52,7 +65,7 @@ const Ghost = items.Ghost =
             this.type = OBJECT_TYPE.GHOST;
             this.speed = GHOST_SPEED;
             this.radius = GHOST_RADIUS;
-            this.ambient = 1;
+            this.ambient = 0.9;
             this.color = hex_color("#FF0000");
             this.shape = new defs.Subdivision_Sphere(4),
             Object.assign(this, parameters);
@@ -60,12 +73,16 @@ const Ghost = items.Ghost =
                 {ambient: this.ambient, color: this.color });
         }
 
-        draw(context, program_state, position) {
+        draw(context, program_state, position, direction = undefined) {
             let transform = Mat4.identity();
             transform = transform
                 .times(Mat4.translation(position[0], position[1], position[2]))
                 .times(Mat4.scale(this.radius, this.radius, this.radius));
+            if (direction) {
+                transform = transform.times(direction);
+            }
             this.shape.draw(context, program_state, transform, this.material);
+            return transform;
         }
     }
 
@@ -121,26 +138,29 @@ const DEBUG_MAP_LIST = [
 ];
 const Map = items.Map =
     class Map {
-        constructor(objectPositionList, positionObjectMap) {
-            this.map = DEFAULT_MAP_LIST;
-            this.bottom = -(this.map.length - 1);
+        constructor(objectPositionList) {
+            this.MAP = DEFAULT_MAP_LIST;
+            this.MAP = DEBUG_MAP_LIST;
+            this.bottom = -(this.MAP.length - 1);
             this.top = 0;
             this.left = 0;
-            this.right = Math.floor(this.map[0].length / 2);
+            this.right = Math.floor(this.MAP[0].length / 2);
             this.centerX = (this.left + this.right) / 2;
             this.centerY = (this.bottom + this.top) / 2;
             this.pacmanBirthplace = null;
             this.ghostBirthplace = null;
-            for(let row = 0; row < this.map.length; row++) {
+            this.positionObjectMap = {};
+            for(let row = 0; row < this.MAP.length; row++) {
                 let y = -row;
-                positionObjectMap[y] = {};
-                for (let column = 0; column < this.map[row].length; column += 2) {
+                this.positionObjectMap[y] = {};
+                for (let column = 0; column < this.MAP[row].length; column += 2) {
                     let x = Math.floor(column / 2);
                     let positionVec = vec3(x, y, 0);
-                    let cell = this.map[row][column];
+                    let cell = this.MAP[row][column];
                     if (cell === "#") {
-                        positionObjectMap[y][x] = OBJECT_TYPE.WALL;
-                        objectPositionList.push({type: OBJECT_TYPE.WALL, position: positionVec});
+                        let cell = {type: OBJECT_TYPE.WALL, position: positionVec};
+                        this.positionObjectMap[y][x] = cell;
+                        objectPositionList.push(cell);
                     } else if (cell === "P") {
                         this.pacmanBirthplace = positionVec;
                     } else if (cell === "G") {
@@ -149,14 +169,20 @@ const Map = items.Map =
                 }
             }
         }
-        getAt(position) {
-            let x = Math.round(position[0]), y = Math.round(position[1]);
-            return this.map[y] && this.map[y][x];
-        }
 
-        isWall(position) {
-            let cell = this.getAt(position);
-            return cell && cell.type === OBJECT_TYPE.WALL;
+        isWall(position, x = undefined, y = undefined) {
+            if (position) {
+                x = Math.round(position[0]);
+                y = Math.round(position[1]);
+            }
+            let cell = undefined;
+            if (this.positionObjectMap[y] && this.positionObjectMap[y][x]) {
+                cell = this.positionObjectMap[y][x];
+            }
+            if (!cell || cell.type !== OBJECT_TYPE.WALL) {
+                return false;
+            }
+            return true;
         }
     }
 
