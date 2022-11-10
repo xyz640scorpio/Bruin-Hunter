@@ -189,8 +189,8 @@ const Vector3 = tiny.Vector3 =
             return this[0] == b[0] && this[1] == b[1] && this[2] == b[2]
         }
 
-        plus(b) {
-            return vec3(this[0] + b[0], this[1] + b[1], this[2] + b[2])
+        plus(b, s=1) {
+            return vec3(this[0] + b[0]*s, this[1] + b[1]*s, this[2] + b[2]*s)
         }
 
         minus(b) {
@@ -206,10 +206,10 @@ const Vector3 = tiny.Vector3 =
         }
 
         // Pre-fix operations: Use these for better performance (to avoid new allocation).
-        add_by(b) {
-            this[0] += b[0];
-            this[1] += b[1];
-            this[2] += b[2]
+        add_by(b, s=1) {
+            this[0] += b[0]*s;
+            this[1] += b[1]*s;
+            this[2] += b[2]*s;
         }
 
         subtract_by(b) {

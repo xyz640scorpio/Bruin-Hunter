@@ -24,6 +24,56 @@ const GHOST_RADIUS = 0.25 * 1.25;
 const DOT_RADIUS = 0.05;
 items.exports = {OBJECT_TYPE, PACMAN_SPEED, PACMAN_RADIUS, WALL_WIDTH}
 
+const MusicPlayer = items.MusicPlayer =
+    class MusicPlayer {
+        constructor() {
+            this.start_sound = new Audio('./audio/pacman_beginning.mp3');
+            this.start_sound.preload = 'auto';
+
+            this.chomp_sound = new Audio('./audio/pacman_chomp.mp3');
+            this.chomp_sound.loop = true;
+            this.chomp_sound.preload = 'auto';
+
+            this.death_sound = new Audio('./audio/pacman_death.mp3');
+            this.death_sound.preload = 'auto';
+
+            this.eat_sound = new Audio('./audio/pacman_eatghost.mp3');
+            this.eat_sound.preload = 'auto';
+
+            this.day_mode = new Audio('./audio/day_mode.mp3');
+            this.day_mode.loop = true;
+            this.day_mode.preload = 'auto';
+
+            this.twilight_mode = new Audio('./audio/twilight_mode.mp3');
+            this.twilight_mode.loop = true;
+            this.twilight_mode.preload = 'auto';
+
+            this.nightmare_mode = new Audio('./audio/nightmare_mode.mp3');
+            this.nightmare_mode.loop = true;
+            this.nightmare_mode.preload = 'auto';
+        }
+
+        play_background_sound(mode = 1) {
+            if (mode === 0) {
+                this.day_mode.play();
+            } else if (mode === 1) {
+                this.twilight_mode.play();
+            } else if (mode === 2) {
+                this.nightmare_mode.play();
+            }
+        }
+
+        pause_background_sound(mode = 1) {
+            if (mode === 0) {
+                this.day_mode.pause();
+            } else if (mode === 1) {
+                this.twilight_mode.pause();
+            } else if (mode === 2) {
+                this.nightmare_mode.pause();
+            }
+        }
+    }
+
 const VecHelper = items.VecHelper =
     class VecHelper {
         static round_vec3(v) {
@@ -111,7 +161,7 @@ const DEFAULT_MAP_LIST = [
     '          # . # #         G           # # . #          ',
     '          # . # #   # # # # # # # #   # # . #          ',
     '# # # # # # . # #   #             #   # # . # # # # # #',
-    '            .       #             #       .            ',
+    '          # .       #             #       . #          ',
     '# # # # # # . # #   #             #   # # . # # # # # #',
     '          # . # #   # # # # # # # #   # # . #          ',
     '          # . # #                     # # . #          ',
@@ -140,7 +190,7 @@ const Map = items.Map =
     class Map {
         constructor(objectPositionList) {
             this.MAP = DEFAULT_MAP_LIST;
-            this.MAP = DEBUG_MAP_LIST;
+            // this.MAP = DEBUG_MAP_LIST;
             this.bottom = -(this.MAP.length - 1);
             this.top = 0;
             this.left = 0;

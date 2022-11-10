@@ -8,6 +8,7 @@ export class Game extends Scene {
     constructor() {
         // constructor(): Scenes begin by populating initial values like the Shapes and Materials they'll need.
         super();
+        this.music_player = new items.MusicPlayer();
         this.objects = {
             wall: new items.Wall(),
             pacman: new items.Ghost({
@@ -36,7 +37,32 @@ export class Game extends Scene {
         this.keys = {};
         this.win_lost = 0; // 1 mean win, -1 mean lost
         this.previousFrameTime = window.performance.now();
+        this.mouse_enabled_canvases = new Set();
     }
+
+    add_mouse_controls(canvas) {
+        // add_mouse_controls():  Attach HTML mouse events to the drawing canvas.
+        // First, measure mouse steering, for rotating the flyaround camera:
+        this.mouse = {"from_center": vec(0, 0)};
+        const mouse_position = (e, rect = canvas.getBoundingClientRect()) =>
+            vec(e.clientX - (rect.left + rect.right) / 2, e.clientY - (rect.bottom + rect.top) / 2);
+        // Set up mouse response.  The last one stops us from reacting if the mouse leaves the canvas:
+        document.addEventListener("mouseup", e => {
+            this.mouse.anchor = undefined;
+        });
+        canvas.addEventListener("mousedown", e => {
+            e.preventDefault();
+            this.mouse.anchor = mouse_position(e);
+        });
+        canvas.addEventListener("mousemove", e => {
+            e.preventDefault();
+            this.mouse.from_center = mouse_position(e);
+        });
+        canvas.addEventListener("mouseout", e => {
+            if (!this.mouse.anchor) this.mouse.from_center.scale_by(0)
+        });
+    }
+
 
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
@@ -112,7 +138,7 @@ export class Game extends Scene {
                     continue;
                 }
                 let corner_distance = Math.sqrt((x_distance - width)*(x_distance - width) + (y_distance - width)*(y_distance - width));
-                if (corner_distance >= pacman_radius) {
+                if (corner_distance >= pacman_radius-0.05) {
                     continue;
                 }
                 if (this.keys['w']) {
@@ -181,7 +207,7 @@ export class Game extends Scene {
         }
         this.update();
 
-        // [TODO](zyksir) play sound
+        this.music_player.play_background_sound();
         program_state.projection_transform = Mat4.perspective(
             Math.PI / 4, context.width / context.height, .1, 1000);
         program_state.lights = [new Light(vec4(0, 0, 50, 1), hex_color("#FFFFFF"), 10 ** 2)];
@@ -193,8 +219,31 @@ export class Game extends Scene {
         for(let i = 0; i < this.numGhost; ++i) {
             this.objects.ghost.draw(context, program_state, this.ghostPositionList[i], this.ghostDirectionList[i]);
         }
-        let pacman_transform = this.objects.pacman.draw(context, program_state, this.pacmanPosition, this.pacmanDirection);
-        let desired = Mat4.inverse(pacman_transform.times(Mat4.translation(0, 0, 10)));
+        this.objects.pacman.draw(context, program_state, this.pacmanPosition, this.pacmanDirection);
+        let direction = this.pacmanDirection.times(this.UP).to3();
+        this.TOP = vec4(0, 0, 1, 0);
+        let targetPosition = this.pacmanPosition.plus(this.TOP, 3).plus(direction, -1);
+        let lookAtPosition = this.pacmanPosition.plus(direction);
+        if (!this.mouse_enabled_canvases.has(context.canvas)) {
+            this.add_mouse_controls(context.canvas);
+            this.mouse_enabled_canvases.add(context.canvas)
+        }
+        if (this.mouse.anchor) {
+            const dragging_vector = this.mouse.from_center.minus(this.mouse.anchor);
+            let delta = 0.01;
+            if (dragging_vector.norm() > 0) {
+                let mouse_vec = vec3(dragging_vector[0], -dragging_vector[1], Math.abs(dragging_vector[0]) + Math.abs(dragging_vector[1])/2);
+                mouse_vec = this.pacmanDirection.times(mouse_vec.to4(0)).to3();
+                // let newTargetPosition = mouse_translation.times(targetPosition.to4(0)).to3();
+                // let newLookAtPosition = mouse_translation.times(lookAtPosition.to4(0)).to3();
+                targetPosition.add_by(mouse_vec, delta);
+                lookAtPosition.add_by(mouse_vec, delta);
+            }
+        }
+
+        let transform = Mat4.look_at(targetPosition, lookAtPosition, this.TOP.to3());
+        // let desired = Mat4.inverse(pacman_transform.times(Mat4.translation(0, 0, 10)));
+        let desired = transform;
         desired = desired.map((x, i) => Vector.from(program_state.camera_inverse[i]).mix(x, 0.1));
         program_state.set_camera(desired);
     }
