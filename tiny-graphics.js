@@ -224,6 +224,10 @@ const Vector3 = tiny.Vector3 =
             this[2] *= s
         }
 
+        round() {
+            return vec3(Math.round(this[0]), Math.round(this[1]), Math.round(this[2]));
+        }
+
         scale_pairwise_by(b) {
             this[0] *= b[0];
             this[1] *= b[1];
@@ -350,6 +354,12 @@ const Vector4 = tiny.Vector4 =
             this[1] *= s;
             this[2] *= s;
             this[3] *= s
+        }
+
+        round() {
+            this[0] = Math.round(this[0]);
+            this[1] = Math.round(this[1]);
+            this[2] = Math.round(this[2]);
         }
 
         scale_pairwise_by(b) {

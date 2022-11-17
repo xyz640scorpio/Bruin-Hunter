@@ -9,28 +9,14 @@ export class Game extends Scene {
         // constructor(): Scenes begin by populating initial values like the Shapes and Materials they'll need.
         super();
         this.music_player = new items.MusicPlayer();
-        this.objects = {
-            wall: new items.Wall(),
-            pacman: new items.Ghost({
-                radius: items.exports.PACMAN_RADIUS,
-                speed: items.exports.PACMAN_SPEED,
-                color: hex_color("#FFFF00")}),
-            ghost: new items.Ghost(),
-        }
-        this.UP = vec4(0, 1, 0, 0); this.DOWN = vec4(0, -1, 0, 0);
-        this.LEFT = vec4(-1, 0, 0, 0); this.RIGHT = vec4(1, 0, 0, 0);
 
-        this.objectPositionList = [];
-        this.map = new items.Map(this.objectPositionList);
-
-        this.pacmanPosition = this.map.pacmanBirthplace;
-        this.pacmanDirection = Mat4.rotation(Math.PI / 2, 0, 0, 1);
-        this.ghostPositionList = [];
-        this.ghostDirectionList = [];
-        this.numGhost = 4;
-        for(let i = 0; i < this.numGhost; i++) {
-            this.ghostPositionList.push(this.map.ghostBirthplace.copy());
-            this.ghostDirectionList.push(Mat4.rotation(-Math.PI / 2, 0, 0, 1));
+        this.objectList = [];
+        this.map = new items.Map(this.objectList);
+        this.bruin = new items.Bruin(this.map.bruinBirthplace, Math.PI/2);
+        this.hunter_list = [];
+        this.numHunter = 4;
+        for(let i = 0; i < this.numHunter; i++) {
+            this.hunter_list.push(new items.Hunter(this.map.hunterBirthplace, -Math.PI/2));
         }
 
         this.initial_camera_location = Mat4.look_at(vec3(0, 10, 20), vec3(0, 0, 0), vec3(0, 1, 0));
@@ -63,127 +49,87 @@ export class Game extends Scene {
         });
     }
 
-
     make_control_panel() {
         // Draw the scene's buttons, setup their actions and keyboard shortcuts, and monitor live measurements.
         this.key_triggered_button("Forward", ["w"], () => this.keys['w'] = true, undefined, () => this.keys['w'] = false);
         this.key_triggered_button("Back", ["s"], () => this.keys['s'] = true, undefined, () => this.keys['s'] = false);
         this.key_triggered_button("Left", ["a"], () => this.keys['a'] = true, undefined, () => this.keys['a'] = false);
         this.key_triggered_button("Right", ["d"], () => this.keys['d'] = true, undefined, () => this.keys['d'] = false);
-
-        // this.key_triggered_button("Up", [" "], () => this.thrust[1] = -1, undefined, () => this.thrust[1] = 0);
-        // this.key_triggered_button("Forward", ["w"], () => this.thrust[2] = 1, undefined, () => this.thrust[2] = 0);
-        // this.new_line();
-        // this.key_triggered_button("Left", ["a"], () => this.thrust[0] = 1, undefined, () => this.thrust[0] = 0);
-        // this.key_triggered_button("Back", ["s"], () => this.thrust[2] = -1, undefined, () => this.thrust[2] = 0);
-        // this.key_triggered_button("Right", ["d"], () => this.thrust[0] = -1, undefined, () => this.thrust[0] = 0);
-        // this.new_line();
-        // this.key_triggered_button("Down", ["z"], () => this.thrust[1] = 1, undefined, () => this.thrust[1] = 0);
     }
 
-    updatePacman(delta) {
+    updateBruin(delta) {
         if (this.win_lost !== 0) {
             return;
         }
         if (this.keys['w']) {
-            this.pacmanPosition.add_by(this.pacmanDirection.times(this.UP).to3().times(delta * this.objects.pacman.speed));
+            this.bruin.advance(delta);
         } else if (this.keys['s']) {
-            this.pacmanPosition.add_by(this.pacmanDirection.times(this.UP).to3().times(-delta * this.objects.pacman.speed));
-        } else if (this.keys['a']) {
-            this.pacmanDirection = this.pacmanDirection.times(Mat4.rotation(Math.PI / 2 * delta, 0, 0, 1));
+            this.bruin.advance(-delta);
+        }
+        if (this.keys['a']) {
+            this.bruin.rotate(delta);
         } else if (this.keys['d']) {
-            this.pacmanDirection = this.pacmanDirection.times(Mat4.rotation(-Math.PI / 2 * delta, 0, 0, 1));
+            this.bruin.rotate(-delta);
         }
-        let pacman_radius = items.exports.PACMAN_RADIUS;
-
-        let leftSide = this.pacmanPosition.plus(this.LEFT.to3().times(pacman_radius)); items.round_vec3(leftSide);
-        let topSide = this.pacmanPosition.plus(this.UP.to3().times(pacman_radius)); items.round_vec3(topSide);
-        let rightSide = this.pacmanPosition.plus(this.RIGHT.to3().times(pacman_radius)); items.round_vec3(rightSide);
-        let bottomSide = this.pacmanPosition.plus(this.DOWN.to3().times(pacman_radius)); items.round_vec3(bottomSide);
-        if (this.map.isWall(leftSide)) {
-            this.pacmanPosition[0] = leftSide[0] + 0.5 + pacman_radius;
-        } else if (this.map.isWall(rightSide)) {
-            this.pacmanPosition[0] = rightSide[0] - 0.5 - pacman_radius;
-        }
-        if (this.map.isWall(topSide)) {
-            this.pacmanPosition[1] = topSide[1] - 0.5 - pacman_radius;
-        } else if (this.map.isWall(bottomSide)) {
-            this.pacmanPosition[1] = bottomSide[1] + 0.5 + pacman_radius;
-        }
-
-        let width = items.exports.WALL_WIDTH/2;
-        let dx_list = [0.5, 0, -0.5], dy_list = [0.5, 0, -0.5];
+        let dx_list = [1, 0, -1], dy_list = [1, 0, -1];
         let visited = {}
+        let dp = vec3(0, 0, 0);
         for(let i = 0; i < dx_list.length; i++) {
-            let x = Math.round(this.pacmanPosition[0] + dx_list[i]);
+            let x = Math.round(this.bruin.centor[0]) + dx_list[i];
             for(let j = 0; j < dy_list.length; j++) {
-                let y = Math.round(this.pacmanPosition[1] + dy_list[j]);
-                if (visited[100*x + y]) {
+                let y = Math.round(this.bruin.centor[1]) + dy_list[j];
+                if (visited[1000*x + y]) {
                     continue;
                 }
-                visited[100*x+y] = true;
-                // if (!this.map.isWall(undefined, x, y)) {
-                //     continue;
-                // }
-                let cell = undefined;
-                if (this.map.positionObjectMap[y] && this.map.positionObjectMap[y][x]) {
-                    cell = this.map.positionObjectMap[y][x];
-                }
-                if (!cell || cell.type !== items.exports.OBJECT_TYPE.WALL) {
-                    continue;
-                }
-                let x_distance = Math.abs(x - this.pacmanPosition[0]);
-                let y_distance = Math.abs(y - this.pacmanPosition[1]);
-                if (Math.max(x_distance, y_distance) >= width + pacman_radius) {
-                    continue;
-                }
-                let corner_distance = Math.sqrt((x_distance - width)*(x_distance - width) + (y_distance - width)*(y_distance - width));
-                if (corner_distance >= pacman_radius-0.05) {
-                    continue;
-                }
-                if (this.keys['w']) {
-                    this.pacmanPosition.subtract_by(this.pacmanDirection.times(this.UP).to3().times(pacman_radius - corner_distance));
-                } else if (this.keys['s']) {
-                    this.pacmanPosition.add_by(this.pacmanDirection.times(this.UP).to3().times(pacman_radius - corner_distance));
+                visited[1000*x+y] = true;
+                if (this.map.isWall(x, y)) {
+                    let wall = this.map.positionObjectMap[y][x];
+                    let this_dp = this.bruin.collision_wall(wall);
+                    if (dp.norm() < this_dp.norm()) {
+                        dp = this_dp;
+                    }
                 }
             }
         }
+        this.bruin.centor.add_by(dp);
+        this.bruin.blend_state();
     }
 
-    updateGhost(delta, i) {
-        if (i < 0 || i >= this.numGhost) {
-            return;
-        }
-        let previousPosition = this.ghostPositionList[i].plus(this.ghostDirectionList[i].times(this.UP).to3().times(0.5));
-        items.round_vec3(previousPosition);
-        let currentPosition = this.ghostPositionList[i].plus(this.ghostDirectionList[i].times(this.UP).to3().times(0.5 + delta * this.objects.ghost.speed));
-        items.round_vec3(currentPosition);
+    updateHunter(delta, i) {
+        let previousPosition = this.hunter_list[i].virtual_advance(0.5).round();
+        let currentPosition = this.hunter_list[i].virtual_advance(0.5 + delta * this.hunter_list[i].speed).round();
         if (currentPosition.equals(previousPosition)) {
-            this.ghostPositionList[i].add_by(this.ghostDirectionList[i].times(this.UP).to3().times(delta * this.objects.ghost.speed));
+            this.hunter_list[i].advance(delta);
+            this.hunter_list[i].blend_state();
             return;
         }
-        let leftTurn = this.ghostDirectionList[i].times(Mat4.rotation(Math.PI/2, 0, 0, 1));
-        let rightTurn = this.ghostDirectionList[i].times(Mat4.rotation(-Math.PI/2, 0, 0, 1));
-        let backwardTurn = this.ghostDirectionList[i].times(Mat4.rotation(Math.PI, 0, 0, 1));
+        let leftTurn = this.hunter_list[i].virtual_rotate(Math.PI/2);
+        let rightTurn = this.hunter_list[i].virtual_rotate(-Math.PI/2);
+        let backwardTurn = this.hunter_list[i].virtual_rotate(Math.PI);
 
-        let forwardWall = this.map.isWall(currentPosition);
-        let leftWall = this.map.isWall(this.ghostPositionList[i].plus(leftTurn.times(this.UP).to3()));
-        let rightWall = this.map.isWall(this.ghostPositionList[i].plus(rightTurn.times(this.UP).to3()));
-        let backwardWall = this.map.isWall(this.ghostPositionList[i].plus(backwardTurn.times(this.UP).to3()));
+        let forwardWall = this.map.isWall(currentPosition[0], currentPosition[1]);
+        let virtual_left_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(leftTurn)).round();
+        let leftWall = this.map.isWall(virtual_left_pos[0], virtual_left_pos[1]);
+        let virtual_right_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(rightTurn)).round();
+        let rightWall = this.map.isWall(virtual_right_pos[0], virtual_right_pos[1]);
+        let virtual_backward_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(backwardTurn)).round();
+        let backwardWall = this.map.isWall(virtual_backward_pos[0], virtual_backward_pos[1]);
 
         let possibleTurns = [];
-        if (!forwardWall) possibleTurns.push(this.ghostDirectionList[i]);
+        if (!forwardWall) possibleTurns.push(this.hunter_list[i].rotation);
         if (!leftWall) possibleTurns.push(leftTurn);
         if (!rightWall) possibleTurns.push(rightTurn);
         if (possibleTurns.length == 0 && !backwardWall) possibleTurns.push(backwardTurn);
         if (possibleTurns.length === 0) {
-            throw new Error('A ghost got stuck!');
+            throw new Error('A hunter got stuck!');
         }
 
         let newDirection = possibleTurns[Math.floor(Math.random() * possibleTurns.length)];
-        this.ghostDirectionList[i] = newDirection;
-        items.round_vec3(this.ghostPositionList[i]);
-        this.ghostPositionList[i].add_by(this.ghostDirectionList[i].times(this.UP).to3().times(delta * this.objects.ghost.speed));
+        this.hunter_list[i].rotation = newDirection;
+        this.hunter_list[i].centor.round();
+
+        this.hunter_list[i].advance(delta);
+        this.hunter_list[i].blend_state();
     }
 
     update() {
@@ -191,9 +137,9 @@ export class Game extends Scene {
         let animationDelta = Math.min((now - this.previousFrameTime) / 1000, 1/30);
         this.previousFrameTime = now;
 
-        this.updatePacman(animationDelta);
-        for(let i = 0; i < this.numGhost; i++) {
-            this.updateGhost(animationDelta, i);
+        this.updateBruin(animationDelta);
+        for(let i = 0; i < this.numHunter; i++) {
+            this.updateHunter(animationDelta, i);
         }
     }
 
@@ -207,23 +153,20 @@ export class Game extends Scene {
         }
         this.update();
 
-        this.music_player.play_background_sound();
+        // this.music_player.play_background_sound();
         program_state.projection_transform = Mat4.perspective(
             Math.PI / 4, context.width / context.height, .1, 1000);
         program_state.lights = [new Light(vec4(0, 0, 50, 1), hex_color("#FFFFFF"), 10 ** 2)];
-        this.objectPositionList.forEach(function(item) {
-            if (item.type === items.exports.OBJECT_TYPE.WALL) {
-                this.objects.wall.draw(context, program_state, item.position);
-            }
-        }, this);
-        for(let i = 0; i < this.numGhost; ++i) {
-            this.objects.ghost.draw(context, program_state, this.ghostPositionList[i], this.ghostDirectionList[i]);
+        this.objectList.forEach((item) => {item.draw(context, program_state);});
+        for(let i = 0; i < this.numHunter; ++i) {
+            this.hunter_list[i].draw(context, program_state);
         }
-        this.objects.pacman.draw(context, program_state, this.pacmanPosition, this.pacmanDirection);
-        let direction = this.pacmanDirection.times(this.UP).to3();
+        this.bruin.draw(context, program_state);
         this.TOP = vec4(0, 0, 1, 0);
-        let targetPosition = this.pacmanPosition.plus(this.TOP, 3).plus(direction, -1);
-        let lookAtPosition = this.pacmanPosition.plus(direction);
+        this.UP = vec4(0, 1, 0, 0);
+        let direction = this.bruin.rotation.times(this.UP).to3();
+        let targetPosition = this.bruin.centor.plus(this.TOP, 3).plus(direction, -1);
+        let lookAtPosition = this.bruin.centor.plus(direction);
         if (!this.mouse_enabled_canvases.has(context.canvas)) {
             this.add_mouse_controls(context.canvas);
             this.mouse_enabled_canvases.add(context.canvas)
@@ -233,7 +176,7 @@ export class Game extends Scene {
             let delta = 0.01;
             if (dragging_vector.norm() > 0) {
                 let mouse_vec = vec3(dragging_vector[0], -dragging_vector[1], Math.abs(dragging_vector[0]) + Math.abs(dragging_vector[1])/2);
-                mouse_vec = this.pacmanDirection.times(mouse_vec.to4(0)).to3();
+                mouse_vec = this.bruin.rotation.times(mouse_vec.to4(0)).to3();
                 // let newTargetPosition = mouse_translation.times(targetPosition.to4(0)).to3();
                 // let newLookAtPosition = mouse_translation.times(lookAtPosition.to4(0)).to3();
                 targetPosition.add_by(mouse_vec, delta);
