@@ -13,6 +13,7 @@ export class Game extends Scene {
         this.objectList = [];
         this.map = new items.Map(this.objectList);
         this.bruin = new items.Bruin(this.map.bruinBirthplace, Math.PI/2);
+        this.text = new items.Text();
         this.hunter_list = [];
         this.numHunter = 4;
         for(let i = 0; i < this.numHunter; i++) {
@@ -24,6 +25,11 @@ export class Game extends Scene {
         this.win_lost = 0; // 1 mean win, -1 mean lost
         this.previousFrameTime = window.performance.now();
         this.mouse_enabled_canvases = new Set();
+
+        this.TOP = vec3(0, 0, 1);
+        let direction = items.Body.get_direction_vec(this.bruin.rotation);
+        this.cameraPosition = this.bruin.centor.plus(this.TOP, 3).plus(direction, -1);
+        this.cameraLookAt = this.bruin.centor.plus(direction);
     }
 
     add_mouse_controls(canvas) {
@@ -58,7 +64,10 @@ export class Game extends Scene {
     }
 
     updateBruin(delta) {
-        if (this.win_lost !== 0) {
+        if (this.win_lost === -1) {
+            this.bruin.transparent(delta);
+            return;
+        } else if (this.win_lost === 1) {
             return;
         }
         if (this.keys['w']) {
@@ -73,6 +82,7 @@ export class Game extends Scene {
         }
         let dx_list = [1, 0, -1], dy_list = [1, 0, -1];
         let visited = {}
+        this.bruin.cal_inverse();
         let dp = vec3(0, 0, 0);
         for(let i = 0; i < dx_list.length; i++) {
             let x = Math.round(this.bruin.centor[0]) + dx_list[i];
@@ -88,6 +98,13 @@ export class Game extends Scene {
                     if (dp.norm() < this_dp.norm()) {
                         dp = this_dp;
                     }
+                } else if (this.map.isDot(x, y)) {
+                    let item = this.map.positionObjectMap[y][x];
+                    let is_collision = this.bruin.collision_item(item);
+                    if (is_collision) {
+                        item.visible = false;
+                        this.map.num_dots -= 1;
+                    }
                 }
             }
         }
@@ -95,28 +112,31 @@ export class Game extends Scene {
         this.bruin.blend_state();
     }
 
-    updateHunter(delta, i) {
-        let previousPosition = this.hunter_list[i].virtual_advance(0.5).round();
-        let currentPosition = this.hunter_list[i].virtual_advance(0.5 + delta * this.hunter_list[i].speed).round();
-        if (currentPosition.equals(previousPosition)) {
-            this.hunter_list[i].advance(delta);
-            this.hunter_list[i].blend_state();
+    updateHunter(delta, hunter) {
+        if (this.win_lost === 1) {
             return;
         }
-        let leftTurn = this.hunter_list[i].virtual_rotate(Math.PI/2);
-        let rightTurn = this.hunter_list[i].virtual_rotate(-Math.PI/2);
-        let backwardTurn = this.hunter_list[i].virtual_rotate(Math.PI);
+        let previousPosition = hunter.virtual_advance(0.5).round();
+        let currentPosition = hunter.virtual_advance(0.5 + delta * hunter.speed).round();
+        if (currentPosition.equals(previousPosition)) {
+            hunter.advance(delta);
+            hunter.blend_state();
+            return;
+        }
+        let leftTurn = hunter.virtual_rotate(Math.PI/2);
+        let rightTurn = hunter.virtual_rotate(-Math.PI/2);
+        let backwardTurn = hunter.virtual_rotate(Math.PI);
 
         let forwardWall = this.map.isWall(currentPosition[0], currentPosition[1]);
-        let virtual_left_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(leftTurn)).round();
+        let virtual_left_pos = hunter.centor.plus(items.Body.get_direction_vec(leftTurn)).round();
         let leftWall = this.map.isWall(virtual_left_pos[0], virtual_left_pos[1]);
-        let virtual_right_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(rightTurn)).round();
+        let virtual_right_pos = hunter.centor.plus(items.Body.get_direction_vec(rightTurn)).round();
         let rightWall = this.map.isWall(virtual_right_pos[0], virtual_right_pos[1]);
-        let virtual_backward_pos = this.hunter_list[i].centor.plus(items.Body.get_direction_vec(backwardTurn)).round();
+        let virtual_backward_pos = hunter.centor.plus(items.Body.get_direction_vec(backwardTurn)).round();
         let backwardWall = this.map.isWall(virtual_backward_pos[0], virtual_backward_pos[1]);
 
         let possibleTurns = [];
-        if (!forwardWall) possibleTurns.push(this.hunter_list[i].rotation);
+        if (!forwardWall) possibleTurns.push(hunter.rotation);
         if (!leftWall) possibleTurns.push(leftTurn);
         if (!rightWall) possibleTurns.push(rightTurn);
         if (possibleTurns.length == 0 && !backwardWall) possibleTurns.push(backwardTurn);
@@ -125,21 +145,66 @@ export class Game extends Scene {
         }
 
         let newDirection = possibleTurns[Math.floor(Math.random() * possibleTurns.length)];
-        this.hunter_list[i].rotation = newDirection;
-        this.hunter_list[i].centor.round();
+        hunter.rotation = newDirection;
+        hunter.centor.round();
 
-        this.hunter_list[i].advance(delta);
-        this.hunter_list[i].blend_state();
+        hunter.advance(delta);
+        hunter.blend_state();
     }
 
-    update() {
+    update(context) {
         let now = window.performance.now();
         let animationDelta = Math.min((now - this.previousFrameTime) / 1000, 1/30);
         this.previousFrameTime = now;
 
         this.updateBruin(animationDelta);
         for(let i = 0; i < this.numHunter; i++) {
-            this.updateHunter(animationDelta, i);
+            let hunter = this.hunter_list[i];
+            this.updateHunter(animationDelta, hunter);
+            let is_collision = this.bruin.collision_item(hunter);
+            if (is_collision) {
+                this.win_lost = -1;
+                this.music_player.pause_background_sound();
+                this.text.readyShow(this.bruin, false);
+            }
+        }
+        if (this.win_lost === 0 && this.map.num_dots == 0) {
+            this.text.readyShow(this.bruin, true);
+            this.win_lost = 1
+        }
+        this.updateCamera(context, animationDelta);
+    }
+
+    updateCamera(context, delta) {
+        let direction = items.Body.get_direction_vec(this.bruin.rotation);
+        if (this.win_lost === 1) {
+            this.cameraPosition.set(this.map.centorX, this.map.centorY, 50);
+            this.cameraLookAt.set(this.map.centorX, this.map.centorY, 0);
+            return;
+        } else if (this.win_lost === -1) {
+            this.cameraPosition = this.bruin.centor.plus(this.TOP, 4);
+            this.cameraLookAt = this.bruin.centor.plus(direction, 0.1);
+            return;
+        }
+        this.cameraPosition = this.bruin.centor.plus(this.TOP, 3).plus(direction, -1);
+        this.cameraLookAt = this.bruin.centor.plus(direction);
+        if (!this.mouse_enabled_canvases.has(context.canvas)) {
+            this.add_mouse_controls(context.canvas);
+            this.mouse_enabled_canvases.add(context.canvas)
+        }
+        if (this.mouse.anchor) {
+            const dragging_vector = this.mouse.from_center.minus(this.mouse.anchor);
+            let delta = 0.01;
+            if (dragging_vector.norm() > 0) {
+                let mouse_vec = vec3(dragging_vector[0], -dragging_vector[1], Math.abs(dragging_vector[0]) + Math.abs(dragging_vector[1])/2);
+                mouse_vec = this.bruin.rotation.times(mouse_vec.to4(0)).to3();
+                if (mouse_vec.norm() > 100) {
+                    mouse_vec = mouse_vec.normalized();
+                    mouse_vec.scale_by(250);
+                }
+                this.cameraPosition.add_by(mouse_vec, delta);
+                this.cameraLookAt.add_by(mouse_vec, delta);
+            }
         }
     }
 
@@ -151,9 +216,9 @@ export class Game extends Scene {
             // Define the global camera and projection matrices, which are stored in program_state.
             program_state.set_camera(this.initial_camera_location);
         }
-        this.update();
+        this.update(context);
 
-        // this.music_player.play_background_sound();
+        this.music_player.play_background_sound();
         program_state.projection_transform = Mat4.perspective(
             Math.PI / 4, context.width / context.height, .1, 1000);
         program_state.lights = [new Light(vec4(0, 0, 50, 1), hex_color("#FFFFFF"), 10 ** 2)];
@@ -162,31 +227,11 @@ export class Game extends Scene {
             this.hunter_list[i].draw(context, program_state);
         }
         this.bruin.draw(context, program_state);
-        this.TOP = vec4(0, 0, 1, 0);
-        this.UP = vec4(0, 1, 0, 0);
-        let direction = this.bruin.rotation.times(this.UP).to3();
-        let targetPosition = this.bruin.centor.plus(this.TOP, 3).plus(direction, -1);
-        let lookAtPosition = this.bruin.centor.plus(direction);
-        if (!this.mouse_enabled_canvases.has(context.canvas)) {
-            this.add_mouse_controls(context.canvas);
-            this.mouse_enabled_canvases.add(context.canvas)
-        }
-        if (this.mouse.anchor) {
-            const dragging_vector = this.mouse.from_center.minus(this.mouse.anchor);
-            let delta = 0.01;
-            if (dragging_vector.norm() > 0) {
-                let mouse_vec = vec3(dragging_vector[0], -dragging_vector[1], Math.abs(dragging_vector[0]) + Math.abs(dragging_vector[1])/2);
-                mouse_vec = this.bruin.rotation.times(mouse_vec.to4(0)).to3();
-                // let newTargetPosition = mouse_translation.times(targetPosition.to4(0)).to3();
-                // let newLookAtPosition = mouse_translation.times(lookAtPosition.to4(0)).to3();
-                targetPosition.add_by(mouse_vec, delta);
-                lookAtPosition.add_by(mouse_vec, delta);
-            }
+        if (this.text.visible) {
+            this.text.draw(context, program_state);
         }
 
-        let transform = Mat4.look_at(targetPosition, lookAtPosition, this.TOP.to3());
-        // let desired = Mat4.inverse(pacman_transform.times(Mat4.translation(0, 0, 10)));
-        let desired = transform;
+        let desired = Mat4.look_at(this.cameraPosition, this.cameraLookAt, this.TOP);
         desired = desired.map((x, i) => Vector.from(program_state.camera_inverse[i]).mix(x, 0.1));
         program_state.set_camera(desired);
     }

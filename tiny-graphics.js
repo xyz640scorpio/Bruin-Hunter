@@ -224,6 +224,12 @@ const Vector3 = tiny.Vector3 =
             this[2] *= s
         }
 
+        set(x, y, z) {
+            this[0] = x;
+            this[1] = y;
+            this[2] = z;
+        }
+
         round() {
             return vec3(Math.round(this[0]), Math.round(this[1]), Math.round(this[2]));
         }

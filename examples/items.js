@@ -14,6 +14,7 @@ const OBJECT_TYPE = {
     WALL: 1,
     BRUIN: 2,
     HUNTER: 3,
+    DOT: 4,
 }
 
 const DIRECTION = {
@@ -24,9 +25,6 @@ const DIRECTION = {
 }
 
 const spin_axis = vec3(0, 0, 1);
-const PACMAN_SPEED = 2;
-const PACMAN_RADIUS = 0.25;
-const DOT_RADIUS = 0.05;
 const DEFAULT_CENTER = vec3(0, 0, 0);
 const DEFAULT_ROTATION = Mat4.identity();
 const Body = items.Body =
@@ -40,9 +38,17 @@ const Body = items.Body =
             this.draw_centor = this.centor; // by default, we don't use mix(previous_state, alpha)
             this.rotation = DEFAULT_ROTATION;
             this.drawn_location = undefined;
+            this.visible = true;
+            this.speed = 0;
         }
 
-        advance(time_amount) {}
+        advance(dt) {
+            this.centor.add_by(this.rotation.times(DIRECTION.UP).to3().times(dt * this.speed));
+        }
+
+        rotate(dt) {
+            this.rotation = this.rotation.times(Mat4.rotation(dt * Math.PI / 2, ...spin_axis));
+        }
 
         blend_state() {
             // blend_state(): Compute the final matrix we'll draw using the previous two physical
@@ -54,7 +60,9 @@ const Body = items.Body =
         }
 
         draw(context, program_state) {
-            this.shape.draw(context, program_state, this.drawn_location, this.material);
+            if (this.visible) {
+                this.shape.draw(context, program_state, this.drawn_location, this.material);
+            }
         }
 
         cal_inverse() {
@@ -72,20 +80,23 @@ const Data_Loader = items.Data_Loader =
         constructor() {
             this.textures = {
                 bruin: new Texture("./assets/bruin_2.png"),
-                rgb: new Texture("./assets/rgb.jpg"),
-                earth: new Texture("./assets/earth.gif"),
+                hunter: new Texture("./assets/usc_hunter.png"),
+                game_over: new Texture("./assets/gameOver.png"),
+                you_win: new Texture("./assets/winText.png"),
                 stars: new Texture("./assets/stars.png"),
                 text: new Texture("./assets/text.png"),
+                usc: new Texture("./assets/USCLogo.png")
             };
             this.shapes = {
-                donut: new defs.Torus(15, 15, [[0, 2], [0, 1]]),
-                cone: new defs.Closed_Cone(4, 10, [[0, 2], [0, 1]]),
-                capped: new defs.Capped_Cylinder(4, 12, [[0, 2], [0, 1]]),
                 ball: new defs.Subdivision_Sphere(4, [[0, 1], [0, 1]]),
                 cube: new defs.Cube(),
-                prism: new (defs.Capped_Cylinder.prototype.make_flat_shaded_version())(10, 10, [[0, 2], [0, 1]]),
-                gem: new (defs.Subdivision_Sphere.prototype.make_flat_shaded_version())(2),
-                donut2: new (defs.Torus.prototype.make_flat_shaded_version())(20, 20, [[0, 2], [0, 1]]),
+                square: new defs.Square(),
+                // donut: new defs.Torus(15, 15, [[0, 2], [0, 1]]),
+                // cone: new defs.Closed_Cone(4, 10, [[0, 2], [0, 1]]),
+                // capped: new defs.Capped_Cylinder(4, 12, [[0, 2], [0, 1]]),
+                // prism: new (defs.Capped_Cylinder.prototype.make_flat_shaded_version())(10, 10, [[0, 2], [0, 1]]),
+                // gem: new (defs.Subdivision_Sphere.prototype.make_flat_shaded_version())(2),
+                // donut2: new (defs.Torus.prototype.make_flat_shaded_version())(20, 20, [[0, 2], [0, 1]]),
             };
             this.audios = {
                 // start: new Audio('./audio/pacman_beginning.mp3'),
@@ -110,14 +121,13 @@ const Data_Loader = items.Data_Loader =
     }
 
 const data_loader = new Data_Loader();
-items.exports = {OBJECT_TYPE, PACMAN_SPEED, PACMAN_RADIUS}
 
 const WALL_SIZE = vec3(0.5, 0.5, 0.5);
 const WALL_MATERIAL = new Material(
     data_loader.shaders.fake_bump_map,
-    {   ambient: 0.5,
+    {   ambient: 1,
         color: hex_color("#0000FF"),
-        texture: data_loader.textures.stars
+        texture: data_loader.textures.usc
     });
 const Wall = items.Wall =
     class Wall extends Body {
@@ -134,22 +144,41 @@ const Wall = items.Wall =
         static isWall(item) {
             return item && item.type && item.type === OBJECT_TYPE.WALL;
         }
+    }
 
-        static isIntersect(p, margin = 0) {
-            let width = WALL_SIZE[0];
-            p.apply(value =>  width+margin-Math.abs(value));
-            return p.maximize();
+const DOT_RADIUS = 0.05;
+const DOT_SIZE = vec3(DOT_RADIUS, DOT_RADIUS, DOT_RADIUS);
+const DOT_MATERIAL = new Material(
+    data_loader.shaders.fake_bump_map,
+    {   ambient: 1,
+        color: hex_color("#60A04C")
+    });
+const Dot = items.Dot =
+    class extends Body {
+        constructor(position, parameters=undefined) {
+            super(data_loader.shapes.ball, DOT_MATERIAL, DOT_SIZE);
+            this.type = OBJECT_TYPE.DOT;
+            this.radius = DOT_RADIUS;
+            Object.assign(this.material, parameters);
+            this.centor = position;
+            this.draw_centor = position; // we won't update centor for Wall
+            this.blend_state();
+            this.cal_inverse();
+        }
+
+        static isDot(item) {
+            return item && item.type && item.type === OBJECT_TYPE.DOT;
         }
     }
 
-const HUNTER_SPEED = 1.5;
+const HUNTER_SPEED = 1;
 const HUNTER_RADIUS = 0.25 * 1.25;
 const HUNTER_SIZE = vec3(HUNTER_RADIUS, HUNTER_RADIUS, HUNTER_RADIUS);
 const HUNTER_MATERIAL = new Material(
     data_loader.shaders.fake_bump_map,
     {   ambient: 0.5,
         color: hex_color("#FF0000"),
-        texture: data_loader.textures.rgb
+        texture: data_loader.textures.hunter
     });
 const Hunter = items.Hunter =
     class Hunter extends Body {
@@ -167,6 +196,9 @@ const Hunter = items.Hunter =
         blend_state() {
             this.draw_centor = this.centor;
             super.blend_state();
+            this.drawn_location = this.drawn_location
+                .times(Mat4.rotation(-Math.PI/2, 0, 1, 0))
+                .times(Mat4.rotation(-Math.PI, 1, 0, 0));
         }
 
         advance(dt) {
@@ -187,7 +219,7 @@ const BRUIN_RADIUS = 0.25;
 const BRUIN_SIZE = vec3(BRUIN_RADIUS, BRUIN_RADIUS, BRUIN_RADIUS);
 const BRUIN_MATERIAL = new Material(
     data_loader.shaders.fake_bump_map,
-    {   ambient: 0.5,
+    {   ambient: 1,
         color: hex_color("#FF0000"),
         texture: data_loader.textures.bruin
     });
@@ -205,20 +237,16 @@ const Bruin = items.Bruin =
             this.blend_state();
         }
 
+        transparent(delta) {
+            this.material.ambient = Math.max(this.material.ambient - 0.3 * delta, 0.2);
+        }
+
         blend_state() {
             this.draw_centor = this.centor;
             this.drawn_location = Mat4.translation(...this.draw_centor)
                 .times(this.rotation)
                 .times(Mat4.scale(...this.size))
                 .times(Mat4.rotation(-Math.PI/2, 0, 1, 0));
-        }
-
-        advance(dt) {
-            this.centor.add_by(this.rotation.times(DIRECTION.UP).to3().times(dt * this.speed));
-        }
-
-        rotate(dt) {
-            this.rotation = this.rotation.times(Mat4.rotation(dt * Math.PI / 2, ...spin_axis));
         }
 
         collision_wall(wall) {
@@ -237,18 +265,49 @@ const Bruin = items.Bruin =
             }
             return dp;
         }
-    }
 
-const Dot = items.Dot =
-    class Dot {
-        constructor(parameters) {
-            this.radius = DOT_RADIUS;
-            this.color = hex_color("#60A04C");
-            this.shape = new defs.Subdivision_Sphere(4),
-            Object.assign(this, parameters);
+        static if_collision(p, margin=0) {
+            return p.dot(p) < 1 + margin;
+        }
+
+        collision_item(item) {
+            let points = item.shape.arrays.position;
+            const T = this.inverse.times(item.drawn_location);
+            return points.some(p => Bruin.if_collision(T.times(p.to4(1)).to3()))
         }
     }
 
+const TEXT_SIZE = vec3(2, 2, 0.1);
+const TEXT_MATERIAL = new Material(
+    data_loader.shaders.fake_bump_map,
+    {   ambient: 1,
+        color: hex_color("#FF0000"),
+        texture: data_loader.textures.game_over
+    });
+const Text = items.Text =
+    class Text extends Body {
+        constructor(parameters) {
+            super(data_loader.shapes.square, TEXT_MATERIAL, TEXT_SIZE);
+            Object.assign(this.material, parameters);
+            this.visible = false;
+        }
+
+        readyShow(bruin, win=false) {
+            if (win) {
+                Object.assign(this.material, {
+                    color: hex_color("#3284BF"),
+                    texture: data_loader.textures.you_win
+                });
+            }
+            let direction = Body.get_direction_vec(bruin.rotation);
+            this.centor = bruin.centor.plus(direction, 0.6);
+            this.centor[2] = 0.6;
+            this.rotation = bruin.rotation;
+            this.draw_centor = this.centor;
+            this.blend_state();
+            this.visible = true;
+        }
+    }
 const DEFAULT_MAP_LIST = [
     '# # # # # # # # # # # # # # # # # # # # # # # # # # # #',
     '# . . . . . . . . . . . . # # . . . . . . . . . . . . #',
@@ -293,13 +352,16 @@ const Map = items.Map =
     class Map {
         constructor(objectList) {
             this.MAP = DEFAULT_MAP_LIST;
-            this.MAP = DEBUG_MAP_LIST;
+            // this.MAP = DEBUG_MAP_LIST;
             this.bottom = -(this.MAP.length - 1);
             this.top = 0;
             this.left = 0;
             this.right = Math.floor(this.MAP[0].length / 2);
+            this.centorX = (this.left + this.right) / 2;
+            this.centorY = (this.bottom + this.top) / 2;
             this.bruinBirthplace = null; this.hunterBirthplace = null;
             this.positionObjectMap = {};
+            this.num_dots = 0;
             for(let row = 0; row < this.MAP.length; row++) {
                 let y = -row;
                 this.positionObjectMap[y] = {};
@@ -315,6 +377,11 @@ const Map = items.Map =
                         this.bruinBirthplace = positionVec;
                     } else if (cell === "G") {
                         this.hunterBirthplace = positionVec;
+                    } else if (cell === ".") {
+                        let dot = new Dot(positionVec);
+                        this.positionObjectMap[y][x] = dot;
+                        objectList.push(dot);
+                        this.num_dots += 1;
                     }
                 }
             }
@@ -326,6 +393,17 @@ const Map = items.Map =
                 item = this.positionObjectMap[y][x];
             }
             return Wall.isWall(item);
+        }
+
+        isDot(x, y) {
+            let item = undefined;
+            if (this.positionObjectMap[y] && this.positionObjectMap[y][x]) {
+                item = this.positionObjectMap[y][x];
+            }
+            if (item) {
+                return item.visible && (Dot.isDot(item));
+            }
+            return false;
         }
     }
 
@@ -344,23 +422,12 @@ const MusicPlayer = items.MusicPlayer =
         }
 
         play_background_sound(mode = 1) {
-            if (mode === 0) {
-                this.audios.day.play();
-            } else if (mode === 1) {
-                this.audios.twilight.play();
-            } else if (mode === 2) {
-                this.audios.nightmare.play();
-            }
+            this.audios.twilight.play();
         }
 
         pause_background_sound(mode = 1) {
-            if (mode === 0) {
-                this.audios.day.pause();
-            } else if (mode === 1) {
-                this.audios.twilight.pause();
-            } else if (mode === 2) {
-                this.audios.nightmare.pause();
-            }
+            this.audios.twilight.muted = 'muted';
+            this.audios.twilight.pause();
         }
     }
 
