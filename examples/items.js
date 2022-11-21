@@ -84,28 +84,18 @@ const Data_Loader = items.Data_Loader =
                 game_over: new Texture("./assets/gameOver.png"),
                 you_win: new Texture("./assets/winText.png"),
                 stars: new Texture("./assets/stars.png"),
-                text: new Texture("./assets/text.png"),
                 usc: new Texture("./assets/USCLogo.png")
             };
             this.shapes = {
                 ball: new defs.Subdivision_Sphere(4, [[0, 1], [0, 1]]),
                 cube: new defs.Cube(),
                 square: new defs.Square(),
-                // donut: new defs.Torus(15, 15, [[0, 2], [0, 1]]),
-                // cone: new defs.Closed_Cone(4, 10, [[0, 2], [0, 1]]),
-                // capped: new defs.Capped_Cylinder(4, 12, [[0, 2], [0, 1]]),
-                // prism: new (defs.Capped_Cylinder.prototype.make_flat_shaded_version())(10, 10, [[0, 2], [0, 1]]),
-                // gem: new (defs.Subdivision_Sphere.prototype.make_flat_shaded_version())(2),
-                // donut2: new (defs.Torus.prototype.make_flat_shaded_version())(20, 20, [[0, 2], [0, 1]]),
             };
             this.audios = {
-                // start: new Audio('./audio/pacman_beginning.mp3'),
-                // chomp: new Audio('./audio/pacman_chomp.mp3'),
-                // death: new Audio('./audio/pacman_death.mp3'),
-                // eat:   new Audio('./audio/pacman_eatghost.mp3'),
                 day:   new Audio('./audio/day_mode.mp3'),
-                twilight: new Audio('./audio/twilight_mode.mp3'),
-                nightmare: new Audio('./audio/nightmare_mode.mp3')
+                background: new Audio('./audio/twilight_mode.mp3'),
+                nightmare: new Audio('./audio/nightmare_mode.mp3'),
+                death: new Audio('./audio/death.mp3')
             };
             this.shaders = {
                 textured_phong: new defs.Textured_Phong(1),
@@ -149,9 +139,9 @@ const Wall = items.Wall =
 const DOT_RADIUS = 0.05;
 const DOT_SIZE = vec3(DOT_RADIUS, DOT_RADIUS, DOT_RADIUS);
 const DOT_MATERIAL = new Material(
-    data_loader.shaders.fake_bump_map,
+    data_loader.shaders.phong_shader,
     {   ambient: 1,
-        color: hex_color("#60A04C")
+        color: hex_color("#E5D080")
     });
 const Dot = items.Dot =
     class extends Body {
@@ -413,21 +403,33 @@ const MusicPlayer = items.MusicPlayer =
         constructor() {
             Object.assign(this,
                 {audios: data_loader.audios})
-            this.audios.day.loop = true;
-            this.audios.day.preload = 'auto';
-            this.audios.twilight.loop = true;
-            this.audios.twilight.preload = 'auto';
-            this.audios.nightmare.loop = true;
-            this.audios.nightmare.preload = 'auto';
+            this.audios.background.loop = true;
+            this.audios.background.preload = 'auto';
+            this.audios.death.loop = true;
+            this.audios.death.preload = 'auto';
+            this.win_lost = -1
         }
 
         play_background_sound(mode = 1) {
-            this.audios.twilight.play();
+            if (this.win_lost === -1) {
+                this.audios.background.muted = true;
+                this.audios.death.muted = false;
+                this.audios.death.play();
+            } else {
+                this.audios.background.muted = false;
+                this.audios.death.muted = true;
+                this.audios.background.play();
+            }
         }
 
         pause_background_sound(mode = 1) {
-            this.audios.twilight.muted = 'muted';
-            this.audios.twilight.pause();
+            this.audios.background.muted = true;
+            this.audios.death.muted = true;
+        }
+
+        continue_background_sound(mode = 1) {
+            this.audios.background.muted = false;
+            this.audios.death.muted = false;
         }
     }
 

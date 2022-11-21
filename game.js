@@ -30,6 +30,8 @@ export class Game extends Scene {
         let direction = items.Body.get_direction_vec(this.bruin.rotation);
         this.cameraPosition = this.bruin.centor.plus(this.TOP, 3).plus(direction, -1);
         this.cameraLookAt = this.bruin.centor.plus(direction);
+
+        this.play_music = true;
     }
 
     add_mouse_controls(canvas) {
@@ -61,6 +63,10 @@ export class Game extends Scene {
         this.key_triggered_button("Back", ["s"], () => this.keys['s'] = true, undefined, () => this.keys['s'] = false);
         this.key_triggered_button("Left", ["a"], () => this.keys['a'] = true, undefined, () => this.keys['a'] = false);
         this.key_triggered_button("Right", ["d"], () => this.keys['d'] = true, undefined, () => this.keys['d'] = false);
+
+        this.new_line();
+        this.key_triggered_button("Pause Background Music", ["p"], () => {this.play_music = false; this.music_player.pause_background_sound()});
+        this.key_triggered_button("Play Background Music", ["c"], () => {this.play_music = true; this.music_player.continue_background_sound()});
     }
 
     updateBruin(delta) {
@@ -218,7 +224,10 @@ export class Game extends Scene {
         }
         this.update(context);
 
-        this.music_player.play_background_sound();
+        this.music_player.win_lost = this.win_lost;
+        if (this.play_music) {
+            this.music_player.play_background_sound();
+        }
         program_state.projection_transform = Mat4.perspective(
             Math.PI / 4, context.width / context.height, .1, 1000);
         program_state.lights = [new Light(vec4(0, 0, 50, 1), hex_color("#FFFFFF"), 10 ** 2)];
