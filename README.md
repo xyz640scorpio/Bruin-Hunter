@@ -1,4 +1,4 @@
-Project of CS174A 2022 Fall: Bruin Hunter
+### Project of CS174A 2022 Fall: Bruin Hunter Timeline
 
 - [ ] Step 1: add basic scene
 - [ ] Step 2: Add Bruin and Hunter
