@@ -79,7 +79,7 @@ const Data_Loader = items.Data_Loader =
     // **Test_Data** pre-loads some Shapes and Textures that other Scenes can borrow.
         constructor() {
             this.textures = {
-                bruin: new Texture("./assets/bruin_2.png"),
+                bruin: new Texture("./assets/bruin.png"),
                 hunter: new Texture("./assets/usc_hunter.png"),
                 game_over: new Texture("./assets/gameOver.png"),
                 you_win: new Texture("./assets/winText.png"),
