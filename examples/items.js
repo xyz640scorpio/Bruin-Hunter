@@ -92,9 +92,7 @@ const Data_Loader = items.Data_Loader =
                 square: new defs.Square(),
             };
             this.audios = {
-                day:   new Audio('./audio/day_mode.mp3'),
                 background: new Audio('./audio/twilight_mode.mp3'),
-                nightmare: new Audio('./audio/nightmare_mode.mp3'),
                 death: new Audio('./audio/death.mp3')
             };
             this.shaders = {
@@ -415,10 +413,12 @@ const MusicPlayer = items.MusicPlayer =
                 this.audios.background.muted = true;
                 this.audios.death.muted = false;
                 this.audios.death.play();
+                this.audios.death.volume = 0.05;
             } else {
                 this.audios.background.muted = false;
                 this.audios.death.muted = true;
                 this.audios.background.play();
+                this.audios.background.volume = 0.05;
             }
         }
 
